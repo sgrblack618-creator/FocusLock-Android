@@ -46,6 +46,30 @@ class FocusLockPreferences(context: Context) {
         get() = prefs.getBoolean(KEY_MOTIVATIONAL_REMINDER, true)
         set(value) = prefs.edit().putBoolean(KEY_MOTIVATIONAL_REMINDER, value).apply()
 
+    var excludeYouTubeApp: Boolean
+        get() = prefs.getBoolean(KEY_EXCLUDE_YOUTUBE_APP, false)
+        set(value) = prefs.edit().putBoolean(KEY_EXCLUDE_YOUTUBE_APP, value).apply()
+
+    var widgetQuoteOffset: Int
+        get() = prefs.getInt(KEY_WIDGET_QUOTE_OFFSET, 0)
+        set(value) = prefs.edit().putInt(KEY_WIDGET_QUOTE_OFFSET, value).apply()
+
+    var ruleBlockAdultSites: Boolean
+        get() = prefs.getBoolean(KEY_RULE_BLOCK_ADULT_SITES, true)
+        set(value) = prefs.edit().putBoolean(KEY_RULE_BLOCK_ADULT_SITES, value).apply()
+
+    var ruleBlockGamblingSites: Boolean
+        get() = prefs.getBoolean(KEY_RULE_BLOCK_GAMBLING_SITES, true)
+        set(value) = prefs.edit().putBoolean(KEY_RULE_BLOCK_GAMBLING_SITES, value).apply()
+
+    var ruleBlockSocialShorts: Boolean
+        get() = prefs.getBoolean(KEY_RULE_BLOCK_SOCIAL_SHORTS, false)
+        set(value) = prefs.edit().putBoolean(KEY_RULE_BLOCK_SOCIAL_SHORTS, value).apply()
+
+    var adsBlockerEnabled: Boolean
+        get() = prefs.getBoolean(KEY_ADS_BLOCKER_ENABLED, true)
+        set(value) = prefs.edit().putBoolean(KEY_ADS_BLOCKER_ENABLED, value).apply()
+
     var cleanStreakStartEpochMs: Long
         get() = prefs.getLong(KEY_CLEAN_STREAK_START_MS, 0L)
         set(value) = prefs.edit().putLong(KEY_CLEAN_STREAK_START_MS, value).apply()
@@ -124,10 +148,11 @@ class FocusLockPreferences(context: Context) {
     }
 
     fun resolveDesiredProfile(nowEpochMs: Long = System.currentTimeMillis()): DnsProfile {
-        return if (readTimerState(nowEpochMs).isFocusLockActive) {
-            DnsProfile.FOCUS_LOCK
+        val lockActive = readTimerState(nowEpochMs).isFocusLockActive
+        return if (lockActive && ruleBlockAdultSites) {
+            if (adsBlockerEnabled) DnsProfile.FOCUS_LOCK else DnsProfile.FOCUS_LOCK_NO_ADBLOCK
         } else {
-            DnsProfile.NORMAL
+            if (adsBlockerEnabled) DnsProfile.NORMAL else DnsProfile.NORMAL_NO_ADBLOCK
         }
     }
 
@@ -153,6 +178,12 @@ class FocusLockPreferences(context: Context) {
         private const val KEY_IS_CUSTOM_DURATION = "is_custom_duration"
         private const val KEY_APP_LANGUAGE = "app_language"
         private const val KEY_MOTIVATIONAL_REMINDER = "motivational_reminder_enabled"
+        private const val KEY_EXCLUDE_YOUTUBE_APP = "exclude_youtube_app"
+        private const val KEY_WIDGET_QUOTE_OFFSET = "widget_quote_offset"
+        private const val KEY_RULE_BLOCK_ADULT_SITES = "rule_block_adult_sites"
+        private const val KEY_RULE_BLOCK_GAMBLING_SITES = "rule_block_gambling_sites"
+        private const val KEY_RULE_BLOCK_SOCIAL_SHORTS = "rule_block_social_shorts"
+        private const val KEY_ADS_BLOCKER_ENABLED = "ads_blocker_enabled"
         private const val KEY_CLEAN_STREAK_START_MS = "clean_streak_start_ms"
         private const val KEY_URGES_RESISTED_COUNT = "urges_resisted_count"
         private const val KEY_PERSONAL_COMMITMENT = "personal_commitment_note"
