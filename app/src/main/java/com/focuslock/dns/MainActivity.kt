@@ -150,6 +150,12 @@ class MainActivity : ComponentActivity() {
                             onRequestEnableNormalVpn = {
                                 executeWithVpnConsent { viewModel.activateNormalModeVpn() }
                             },
+                            onSetRuleAdult = viewModel::setRuleBlockAdultSites,
+                            onSetRuleGambling = viewModel::setRuleBlockGamblingSites,
+                            onSetRuleSocial = viewModel::setRuleBlockSocialShorts,
+                            onSetExcludeYouTube = viewModel::setExcludeYouTubeApp,
+                            onSetMotivationalReminder = viewModel::setMotivationalReminderEnabled,
+                            onSetAdsBlockerEnabled = viewModel::setAdsBlockerEnabled,
                             onVerifyPin = viewModel::verifyPin,
                             modifier = Modifier.padding(innerPadding)
                         )
@@ -161,6 +167,8 @@ class MainActivity : ComponentActivity() {
                             onVerifyPin = viewModel::verifyPin,
                             onRemovePin = viewModel::removePin,
                             onSetMotivationalReminder = viewModel::setMotivationalReminderEnabled,
+                            onSetExcludeYouTube = viewModel::setExcludeYouTubeApp,
+                            onSetAdsBlockerEnabled = viewModel::setAdsBlockerEnabled,
                             onSaveCommitment = viewModel::savePersonalCommitment,
                             modifier = Modifier.padding(innerPadding)
                         )
