@@ -14,4 +14,5 @@
     <string name="notif_revoked_body">অ্যান্ড্রয়েড সেটিংস থেকে ভিপিএন বন্ধ হয়েছে। পুনরায় চালু করতে ট্যাপ করুন।</string>
     <string name="notif_boot_needed_title">রিবুটের পর সুরক্ষা চালু করুন</string>
     <string name="notif_boot_needed_body">ডিভাইস চালু হয়েছে। ডিএনএস ফিল্টারিং সক্রিয় রাখতে FocusLock খুলুন।</string>
+    <string name="widget_description">হোম স্ক্রিনে বাকি সময়, পবিত্র ধারা এবং প্রতি ঘণ্টার ইসলামিক ও মোটিভেশনাল উক্তি দেখায়।</string>
 </resources>
