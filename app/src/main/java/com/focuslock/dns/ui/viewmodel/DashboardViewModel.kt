@@ -1,17 +1,20 @@
 package com.focuslock.dns.ui.viewmodel
 
 import android.app.Application
+import android.content.Context
+import android.os.PowerManager
 import android.provider.Settings
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.focuslock.dns.data.FocusLockPreferences
 import com.focuslock.dns.data.MotivationalReminders
 import com.focuslock.dns.model.DashboardUiState
-import com.focuslock.dns.model.DnsProfile
 import com.focuslock.dns.model.LockTimerState
+import com.focuslock.dns.model.VpnConnectionState
 import com.focuslock.dns.security.PinSecurityManager
 import com.focuslock.dns.timer.LockTimerManager
 import com.focuslock.dns.vpn.FocusLockVpnService
+import com.focuslock.dns.widget.FocusLockWidgetProvider
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -50,7 +53,7 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
             ) { vpnSnapshot, nowMs, config, quoteIndex ->
                 val timer = preferences.readTimerState(nowMs)
                 val wasExpiredNow = !timer.isFocusLockActive &&
-                    vpnSnapshot.activeProfile == DnsProfile.FOCUS_LOCK
+                    vpnSnapshot.activeProfile.isFocusLockAdultFilter
 
                 if (wasExpiredNow) {
                     preferences.clearExpiredTimer()
@@ -82,7 +85,13 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
                     cleanStreakDays = streakDays,
                     urgesResistedCount = preferences.urgesResistedCount,
                     personalCommitmentNote = config.personalCommitmentNote,
-                    activeQuoteIndex = quoteIndex
+                    activeQuoteIndex = quoteIndex,
+                    excludeYouTubeApp = config.excludeYouTubeApp,
+                    ruleBlockAdultSites = config.ruleBlockAdultSites,
+                    ruleBlockGamblingSites = config.ruleBlockGamblingSites,
+                    ruleBlockSocialShorts = config.ruleBlockSocialShorts,
+                    adsBlockerEnabled = config.adsBlockerEnabled,
+                    isBatteryOptimizationIgnored = config.isBatteryOptimizationIgnored
                 )
             }.collect { updated ->
                 _uiState.value = updated
@@ -102,6 +111,7 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
         }
         preferences.appLanguage = next
         configState.value = readConfigSnapshot(configState.value.hasNotificationPermission)
+        FocusLockWidgetProvider.requestUpdate(getApplication())
     }
 
     fun nextQuote() {
@@ -109,8 +119,53 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
     }
 
     fun setMotivationalReminderEnabled(enabled: Boolean) {
+        if (preferences.readTimerState().isFocusLockActive) return
         preferences.motivationalReminderEnabled = enabled
         configState.value = readConfigSnapshot(configState.value.hasNotificationPermission)
+    }
+
+    fun setExcludeYouTubeApp(enabled: Boolean) {
+        if (preferences.readTimerState().isFocusLockActive) return
+        preferences.excludeYouTubeApp = enabled
+        configState.value = readConfigSnapshot(configState.value.hasNotificationPermission)
+        if (preferences.shouldMaintainVpn ||
+            FocusLockVpnService.runtimeSnapshot.value.connectionState == VpnConnectionState.ACTIVE
+        ) {
+            FocusLockVpnService.syncProfile(getApplication())
+        }
+    }
+
+    fun setRuleBlockAdultSites(enabled: Boolean) {
+        if (preferences.readTimerState().isFocusLockActive) return
+        preferences.ruleBlockAdultSites = enabled
+        configState.value = readConfigSnapshot(configState.value.hasNotificationPermission)
+    }
+
+    fun setRuleBlockGamblingSites(enabled: Boolean) {
+        if (preferences.readTimerState().isFocusLockActive) return
+        preferences.ruleBlockGamblingSites = enabled
+        configState.value = readConfigSnapshot(configState.value.hasNotificationPermission)
+    }
+
+    fun setRuleBlockSocialShorts(enabled: Boolean) {
+        if (preferences.readTimerState().isFocusLockActive) return
+        preferences.ruleBlockSocialShorts = enabled
+        configState.value = readConfigSnapshot(configState.value.hasNotificationPermission)
+    }
+
+    /**
+     * Intentionally remains switchable ON/OFF even while Focus Lock & PIN are locked,
+     * so sites/apps that block ad-blockers remain usable without weakening Adult/Gambling/Social locks.
+     */
+    fun setAdsBlockerEnabled(enabled: Boolean) {
+        preferences.adsBlockerEnabled = enabled
+        configState.value = readConfigSnapshot(configState.value.hasNotificationPermission)
+        if (preferences.shouldMaintainVpn ||
+            FocusLockVpnService.runtimeSnapshot.value.connectionState == VpnConnectionState.ACTIVE
+        ) {
+            FocusLockVpnService.syncProfile(getApplication())
+        }
+        FocusLockWidgetProvider.requestUpdate(getApplication())
     }
 
     fun savePersonalCommitment(note: String) {
@@ -169,6 +224,8 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
 
     private fun readConfigSnapshot(hasNotificationPermission: Boolean = true): ConfigSnapshot {
         val app = getApplication<Application>()
+        val powerManager = app.getSystemService(Context.POWER_SERVICE) as? PowerManager
+        val batteryExempt = powerManager?.isIgnoringBatteryOptimizations(app.packageName) == true
         return ConfigSnapshot(
             selectedPresetDays = preferences.selectedPresetDays,
             customDays = preferences.customDays,
@@ -180,7 +237,13 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
             appLanguage = preferences.appLanguage,
             motivationalReminderEnabled = preferences.motivationalReminderEnabled,
             canDrawOverlays = Settings.canDrawOverlays(app),
-            personalCommitmentNote = preferences.personalCommitmentNote
+            personalCommitmentNote = preferences.personalCommitmentNote,
+            excludeYouTubeApp = preferences.excludeYouTubeApp,
+            ruleBlockAdultSites = preferences.ruleBlockAdultSites,
+            ruleBlockGamblingSites = preferences.ruleBlockGamblingSites,
+            ruleBlockSocialShorts = preferences.ruleBlockSocialShorts,
+            adsBlockerEnabled = preferences.adsBlockerEnabled,
+            isBatteryOptimizationIgnored = batteryExempt
         )
     }
 
@@ -195,6 +258,12 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
         val appLanguage: String,
         val motivationalReminderEnabled: Boolean,
         val canDrawOverlays: Boolean,
-        val personalCommitmentNote: String
+        val personalCommitmentNote: String,
+        val excludeYouTubeApp: Boolean,
+        val ruleBlockAdultSites: Boolean,
+        val ruleBlockGamblingSites: Boolean,
+        val ruleBlockSocialShorts: Boolean,
+        val adsBlockerEnabled: Boolean,
+        val isBatteryOptimizationIgnored: Boolean
     )
 }
