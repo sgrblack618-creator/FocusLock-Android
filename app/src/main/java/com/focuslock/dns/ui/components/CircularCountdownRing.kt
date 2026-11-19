@@ -31,6 +31,7 @@ fun CircularCountdownRing(
     timerState: LockTimerState,
     selectedDurationLabel: String,
     strings: AppStrings,
+    adsBlockerEnabled: Boolean = true,
     modifier: Modifier = Modifier
 ) {
     val isVpnActive = vpnState == VpnConnectionState.ACTIVE
@@ -124,7 +125,11 @@ fun CircularCountdownRing(
                 )
             } else {
                 Text(
-                    text = if (isVpnActive) strings.ringAdBlock else "0${strings.daysUnit} 0${strings.hoursUnit}",
+                    text = when {
+                        !isVpnActive -> "0${strings.daysUnit} 0${strings.hoursUnit}"
+                        adsBlockerEnabled -> strings.ringAdBlock
+                        else -> strings.ringAdsPaused
+                    },
                     style = TextStyle(
                         fontSize = 24.sp,
                         fontWeight = FontWeight.Bold,
