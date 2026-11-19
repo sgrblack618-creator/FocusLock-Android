@@ -25,14 +25,9 @@ class DohResolverClient(vpnService: VpnService) {
 
     private val dohMediaType = "application/dns-message".toMediaType()
 
-    private val bootstrapDns = object : Dns {
-        override fun lookup(hostname: String): List<InetAddress> {
-            return when (hostname) {
-                DnsProfile.NORMAL.dohHost -> DnsProfile.NORMAL.resolveBootstrapAddresses()
-                DnsProfile.FOCUS_LOCK.dohHost -> DnsProfile.FOCUS_LOCK.resolveBootstrapAddresses()
-                else -> throw UnknownHostException("Blocked non-DoH hostname resolution: $hostname")
-            }
-        }
+    private val bootstrapDns = Dns { hostname ->
+        DnsProfile.entries.firstOrNull { it.dohHost == hostname }?.resolveBootstrapAddresses()
+            ?: throw UnknownHostException("Blocked non-DoH hostname resolution: $hostname")
     }
 
     private val protectedSocketFactory = object : SocketFactory() {
@@ -66,10 +61,16 @@ class DohResolverClient(vpnService: VpnService) {
         ): Socket = protect(delegate.createSocket(address, port, localAddress, localPort))
     }
 
+    private val dispatcher = okhttp3.Dispatcher().apply {
+        maxRequests = 16
+        maxRequestsPerHost = 8
+    }
+
     private val client: OkHttpClient = OkHttpClient.Builder()
+        .dispatcher(dispatcher)
         .dns(bootstrapDns)
         .socketFactory(protectedSocketFactory)
-        .connectionPool(ConnectionPool(4, 2, TimeUnit.MINUTES))
+        .connectionPool(ConnectionPool(2, 60, TimeUnit.SECONDS))
         .connectTimeout(4, TimeUnit.SECONDS)
         .readTimeout(5, TimeUnit.SECONDS)
         .writeTimeout(4, TimeUnit.SECONDS)
