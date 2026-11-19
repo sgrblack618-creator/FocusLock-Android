@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">FocusLock</string>
+    <string name="notification_channel_vpn">ভিপিএন ও ডিএনএস সুরক্ষা</string>
+    <string name="notification_channel_vpn_desc">FocusLock চলমান থাকার স্থায়ী অবস্থা নির্দেশ করে</string>
+    <string name="notification_channel_alert">সুরক্ষা সতর্কতা</string>
+    <string name="notification_channel_alert_desc">ভিপিএন সংযোগ বিচ্ছিন্ন বা মেয়াদ শেষ হওয়ার সতর্কতা</string>
+
+    <string name="notif_focus_lock_title">FocusLock — ফোকাস লক সক্রিয়</string>
+    <string name="notif_focus_lock_body">AdGuard Family DNS (প্রাপ্তবয়স্ক সাইট, বিজ্ঞাপন ও ট্র্যাকার ব্লক) চলছে</string>
+    <string name="notif_normal_title">FocusLock — সাধারণ সুরক্ষা সক্রিয়</string>
+    <string name="notif_normal_body">AdGuard Default DNS (সর্বদা বিজ্ঞাপন ও ট্র্যাকার ব্লক) চলছে</string>
+    <string name="notif_revoked_title">FocusLock সুরক্ষা বিচ্ছিন্ন হয়েছে!</string>
+    <string name="notif_revoked_body">অ্যান্ড্রয়েড সেটিংস থেকে ভিপিএন বন্ধ হয়েছে। পুনরায় চালু করতে ট্যাপ করুন।</string>
+    <string name="notif_boot_needed_title">রিবুটের পর সুরক্ষা চালু করুন</string>
+    <string name="notif_boot_needed_body">ডিভাইস চালু হয়েছে। ডিএনএস ফিল্টারিং সক্রিয় রাখতে FocusLock খুলুন।</string>
+</resources>
