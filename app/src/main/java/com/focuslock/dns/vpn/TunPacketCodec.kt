@@ -163,7 +163,7 @@ object TunPacketCodec {
         writeUInt16(out, 4, udpLen) // Payload length
         out[6] = PROTOCOL_UDP.toByte() // Next header
         out[7] = 64.toByte() // Hop limit
-        System.arraycopy(request.dstIp, 0, out, 8, 16) // Swap dst -> src
+        System.arraycopy(request.dstIp, 0, out, 8, 16)  // Swap dst -> src
         System.arraycopy(request.srcIp, 0, out, 24, 16) // Swap src -> dst
 
         // UDP Header
@@ -198,6 +198,23 @@ object TunPacketCodec {
         // Byte 3: set RA = 1, RCODE = 2 (SERVFAIL)
         out[3] = 0x82.toByte()
         // Zero ANCOUNT, NSCOUNT, ARCOUNT (bytes 6..11)
+        for (i in 6 until 12) {
+            out[i] = 0
+        }
+        return out
+    }
+
+    /**
+     * Generates a valid RFC 1035 NXDOMAIN (RCODE = 3) response in RAM for user-selected
+     * local block rules (e.g. gambling/betting or social distraction toggles).
+     */
+    fun buildNxDomainDnsResponse(dnsQuery: ByteArray): ByteArray {
+        if (dnsQuery.size < 12) return ByteArray(0)
+        val out = dnsQuery.copyOf()
+        val reqFlagsHi = dnsQuery[2].toInt() and 0xFF
+        out[2] = ((reqFlagsHi and 0x79) or 0x80).toByte()
+        // Byte 3: set RA = 1, RCODE = 3 (NXDOMAIN)
+        out[3] = 0x83.toByte()
         for (i in 6 until 12) {
             out[i] = 0
         }
