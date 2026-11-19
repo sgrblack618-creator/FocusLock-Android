@@ -5,6 +5,7 @@ import android.content.Context
 import android.content.Intent
 import com.focuslock.dns.data.FocusLockPreferences
 import com.focuslock.dns.vpn.FocusLockVpnService
+import com.focuslock.dns.widget.FocusLockWidgetProvider
 
 class LockExpiryReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent?) {
@@ -16,5 +17,6 @@ class LockExpiryReceiver : BroadcastReceiver() {
                 FocusLockVpnService.syncProfile(context)
             }
         }
+        FocusLockWidgetProvider.requestUpdate(context)
     }
 }
