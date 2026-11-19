@@ -26,10 +26,24 @@ class LockTimerAndProfileTest {
     }
 
     @Test
-    fun profilesMatchExactAdGuardDoHEndpoints() {
+    fun profilesMatchExactEncryptedDoHEndpoints() {
         assertEquals("https://dns.adguard-dns.com/dns-query", DnsProfile.NORMAL.dohUrl)
+        assertEquals("https://security.cloudflare-dns.com/dns-query", DnsProfile.NORMAL_NO_ADBLOCK.dohUrl)
         assertEquals("https://family.adguard-dns.com/dns-query", DnsProfile.FOCUS_LOCK.dohUrl)
-        assertFalse(DnsProfile.NORMAL.bootstrapIps.isEmpty())
-        assertFalse(DnsProfile.FOCUS_LOCK.bootstrapIps.isEmpty())
+        assertEquals("https://family.cloudflare-dns.com/dns-query", DnsProfile.FOCUS_LOCK_NO_ADBLOCK.dohUrl)
+
+        assertFalse(DnsProfile.NORMAL.isFocusLockAdultFilter)
+        assertTrue(DnsProfile.NORMAL.isAdBlockEnabled)
+        assertFalse(DnsProfile.NORMAL_NO_ADBLOCK.isFocusLockAdultFilter)
+        assertFalse(DnsProfile.NORMAL_NO_ADBLOCK.isAdBlockEnabled)
+
+        assertTrue(DnsProfile.FOCUS_LOCK.isFocusLockAdultFilter)
+        assertTrue(DnsProfile.FOCUS_LOCK.isAdBlockEnabled)
+        assertTrue(DnsProfile.FOCUS_LOCK_NO_ADBLOCK.isFocusLockAdultFilter)
+        assertFalse(DnsProfile.FOCUS_LOCK_NO_ADBLOCK.isAdBlockEnabled)
+
+        DnsProfile.entries.forEach { profile ->
+            assertFalse(profile.bootstrapIps.isEmpty())
+        }
     }
 }
