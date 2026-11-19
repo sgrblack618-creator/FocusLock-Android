@@ -64,7 +64,13 @@ data class DashboardUiState(
     val cleanStreakDays: Long = 0L,
     val urgesResistedCount: Int = 0,
     val personalCommitmentNote: String = "",
-    val activeQuoteIndex: Int = 0
+    val activeQuoteIndex: Int = 0,
+    val excludeYouTubeApp: Boolean = false,
+    val ruleBlockAdultSites: Boolean = true,
+    val ruleBlockGamblingSites: Boolean = true,
+    val ruleBlockSocialShorts: Boolean = false,
+    val adsBlockerEnabled: Boolean = true,
+    val isBatteryOptimizationIgnored: Boolean = false
 ) {
     val effectiveDurationMs: Long
         get() = if (isCustomDurationSelected) {
