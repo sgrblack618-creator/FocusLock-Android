@@ -13,6 +13,7 @@ import androidx.work.WorkManager
 import com.focuslock.dns.data.FocusLockPreferences
 import com.focuslock.dns.model.LockTimerState
 import com.focuslock.dns.receiver.LockExpiryReceiver
+import com.focuslock.dns.widget.FocusLockWidgetProvider
 import java.util.concurrent.TimeUnit
 
 class LockTimerManager(
@@ -31,6 +32,7 @@ class LockTimerManager(
         )
 
         scheduleExpiryCallbacks(expiresAt, safeDuration)
+        FocusLockWidgetProvider.requestUpdate(context)
         return preferences.readTimerState(now)
     }
 
@@ -41,6 +43,7 @@ class LockTimerManager(
         } else {
             preferences.clearExpiredTimer()
         }
+        FocusLockWidgetProvider.requestUpdate(context)
     }
 
     private fun scheduleExpiryCallbacks(expiresAtEpochMs: Long, delayMs: Long) {
