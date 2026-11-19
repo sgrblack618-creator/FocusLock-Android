@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">FocusLock</string>
+    <string name="notification_channel_vpn">ভিপিএন ও ডিএনএস সুরক্ষা</string>
+    <string name="notification_channel_vpn_desc">FocusLock চলমান থাকার স্থায়ী অবস্থা নির্দেশ করে</string>
+    <string name="notification_channel_alert">সুরক্ষা সতর্কতা</string>
+    <string name="notification_channel_alert_desc">ভিপিএন সংযোগ বিচ্ছিন্ন বা মেয়াদ শেষ হওয়ার সতর্কতা</string>
+</resources>
