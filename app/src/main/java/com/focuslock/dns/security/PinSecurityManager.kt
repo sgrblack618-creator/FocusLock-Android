@@ -17,6 +17,9 @@ class PinSecurityManager(
     fun isPinConfigured(): Boolean = preferences.isPinConfigured
 
     fun setPin(rawPin: String): Boolean {
+        if (preferences.readTimerState().isFocusLockActive && isPinConfigured()) {
+            return false
+        }
         if (!isValidPinFormat(rawPin)) return false
         val salt = ByteArray(SALT_BYTES).also { SecureRandom().nextBytes(it) }
         val hash = deriveKey(rawPin, salt)
@@ -40,6 +43,7 @@ class PinSecurityManager(
     }
 
     fun removePin(currentPin: String): Boolean {
+        if (preferences.readTimerState().isFocusLockActive) return false
         if (!verifyPin(currentPin)) return false
         preferences.clearPin()
         return true
