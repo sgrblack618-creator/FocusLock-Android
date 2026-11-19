@@ -5,4 +5,5 @@
     <string name="notification_channel_vpn_desc">FocusLock চলমান থাকার স্থায়ী অবস্থা নির্দেশ করে</string>
     <string name="notification_channel_alert">সুরক্ষা সতর্কতা</string>
     <string name="notification_channel_alert_desc">ভিপিএন সংযোগ বিচ্ছিন্ন বা মেয়াদ শেষ হওয়ার সতর্কতা</string>
+    <string name="widget_description">হোম স্ক্রিনে বাকি সময়, পবিত্র ধারা এবং প্রতি ঘণ্টার ইসলামিক ও মোটিভেশনাল উক্তি দেখায়।</string>
 </resources>
