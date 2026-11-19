@@ -1,6 +1,7 @@
 package com.focuslock.dns.ui.screens
 
 import android.content.Intent
+import android.net.Uri
 import android.provider.Settings
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
@@ -33,6 +34,8 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
+import androidx.compose.material3.Switch
+import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -78,6 +81,12 @@ fun DashboardScreen(
     onSelectCustomDuration: (Int, Int) -> Unit,
     onRequestStartFocusLock: () -> Unit,
     onRequestEnableNormalVpn: () -> Unit,
+    onSetRuleAdult: (Boolean) -> Unit,
+    onSetRuleGambling: (Boolean) -> Unit,
+    onSetRuleSocial: (Boolean) -> Unit,
+    onSetExcludeYouTube: (Boolean) -> Unit,
+    onSetMotivationalReminder: (Boolean) -> Unit,
+    onSetAdsBlockerEnabled: (Boolean) -> Unit,
     onVerifyPin: (String) -> Boolean,
     modifier: Modifier = Modifier
 ) {
@@ -243,6 +252,69 @@ fun DashboardScreen(
             }
         }
 
+        // ZTE Blade A54 / MyOS 13 Anti-Kill Background Stability Banner
+        if (!state.isBatteryOptimizationIgnored) {
+            Surface(
+                shape = RoundedCornerShape(16.dp),
+                color = FocusLockColors.SurfaceElevated,
+                border = BorderStroke(1.dp, FocusLockColors.NormalSky.copy(alpha = 0.45f)),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(
+                        text = strings.antiKillTitle,
+                        fontWeight = FontWeight.SemiBold,
+                        fontSize = 14.sp,
+                        color = FocusLockColors.NormalSky
+                    )
+                    Text(
+                        text = strings.antiKillBody,
+                        fontSize = 12.sp,
+                        lineHeight = 17.sp,
+                        color = FocusLockColors.TextSecondary
+                    )
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Button(
+                            onClick = {
+                                runCatching {
+                                    context.startActivity(
+                                        Intent(
+                                            Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS,
+                                            Uri.parse("package:${context.packageName}")
+                                        )
+                                    )
+                                }.onFailure {
+                                    runCatching {
+                                        context.startActivity(Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS))
+                                    }
+                                }
+                            },
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = FocusLockColors.NormalSky,
+                                contentColor = FocusLockColors.Canvas
+                            ),
+                            shape = RoundedCornerShape(10.dp),
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Text(strings.antiKillBatteryBtn, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                        }
+                        OutlinedButton(
+                            onClick = {
+                                runCatching {
+                                    context.startActivity(Intent(Settings.ACTION_VPN_SETTINGS))
+                                }
+                            },
+                            border = BorderStroke(1.dp, FocusLockColors.FocusEmerald.copy(alpha = 0.6f)),
+                            shape = RoundedCornerShape(10.dp),
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Text(strings.antiKillVpnAlwaysOnBtn, fontSize = 11.sp, color = FocusLockColors.FocusEmerald)
+                        }
+                    }
+                }
+            }
+        }
+
         // Main Circular Countdown Hero Surface
         Surface(
             shape = RoundedCornerShape(22.dp),
@@ -260,7 +332,8 @@ fun DashboardScreen(
                     vpnState = state.vpnSnapshot.connectionState,
                     timerState = state.timerState,
                     selectedDurationLabel = selectedDurationLabel,
-                    strings = strings
+                    strings = strings,
+                    adsBlockerEnabled = state.adsBlockerEnabled
                 )
 
                 Spacer(modifier = Modifier.height(14.dp))
@@ -269,7 +342,7 @@ fun DashboardScreen(
                 Text(
                     text = when {
                         !state.isProtectionActuallyRunning -> strings.vpnOffTitle
-                        activeProfile == DnsProfile.FOCUS_LOCK -> strings.profileFocusTitle
+                        activeProfile.isFocusLockAdultFilter -> strings.profileFocusTitle
                         else -> strings.profileNormalTitle
                     },
                     fontSize = 15.sp,
@@ -285,7 +358,9 @@ fun DashboardScreen(
                     text = when {
                         !state.isProtectionActuallyRunning -> strings.vpnOffSubtitle
                         activeProfile == DnsProfile.FOCUS_LOCK -> strings.profileFocusDesc
-                        else -> strings.profileNormalDesc
+                        activeProfile == DnsProfile.FOCUS_LOCK_NO_ADBLOCK -> strings.profileFocusNoAdDesc
+                        activeProfile == DnsProfile.NORMAL -> strings.profileNormalDesc
+                        else -> strings.profileNormalNoAdDesc
                     },
                     fontSize = 12.sp,
                     color = FocusLockColors.TextSecondary
@@ -527,6 +602,156 @@ fun DashboardScreen(
             }
         }
 
+        // Always-Switchable Ads & Tracker Blocker Card (Remains ON/OFF even while Focus Lock & PIN are locked)
+        Surface(
+            shape = RoundedCornerShape(18.dp),
+            color = FocusLockColors.Surface,
+            border = BorderStroke(
+                1.dp,
+                if (state.adsBlockerEnabled) {
+                    FocusLockColors.NormalSky.copy(alpha = 0.45f)
+                } else {
+                    FocusLockColors.WarningAmber.copy(alpha = 0.5f)
+                }
+            ),
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = strings.adsBlockerCardTitle,
+                        fontSize = 15.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        color = FocusLockColors.TextPrimary,
+                        modifier = Modifier.weight(1f)
+                    )
+                    Text(
+                        text = strings.adsBlockerAlwaysSwitchableBadge,
+                        fontSize = 10.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        color = FocusLockColors.NormalSky
+                    )
+                }
+                Text(
+                    text = if (state.adsBlockerEnabled) strings.adsBlockerOnDesc else strings.adsBlockerOffDesc,
+                    fontSize = 11.sp,
+                    lineHeight = 16.sp,
+                    color = if (state.adsBlockerEnabled) FocusLockColors.TextSecondary else FocusLockColors.WarningAmber
+                )
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = strings.adsBlockerSwitchLabel,
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.Medium,
+                        color = FocusLockColors.TextPrimary,
+                        modifier = Modifier.weight(1f)
+                    )
+                    Switch(
+                        checked = state.adsBlockerEnabled,
+                        enabled = true,
+                        onCheckedChange = onSetAdsBlockerEnabled,
+                        colors = SwitchDefaults.colors(
+                            checkedThumbColor = FocusLockColors.Canvas,
+                            checkedTrackColor = FocusLockColors.NormalSky
+                        )
+                    )
+                }
+            }
+        }
+
+        // Pre-Lock Active Rules Checklist (Choose ON/OFF before locking; freezes once locked)
+        Surface(
+            shape = RoundedCornerShape(18.dp),
+            color = FocusLockColors.Surface,
+            border = BorderStroke(
+                1.dp,
+                if (state.timerState.isFocusLockActive) {
+                    FocusLockColors.FocusEmerald.copy(alpha = 0.45f)
+                } else {
+                    FocusLockColors.Hairline
+                }
+            ),
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            val rulesEditable = !state.timerState.isFocusLockActive
+            Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = strings.preLockTitle,
+                        fontSize = 15.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        color = FocusLockColors.TextPrimary,
+                        modifier = Modifier.weight(1f)
+                    )
+                    if (!rulesEditable) {
+                        Icon(
+                            imageVector = Icons.Rounded.Lock,
+                            contentDescription = null,
+                            tint = FocusLockColors.FocusEmerald,
+                            modifier = Modifier.size(16.dp)
+                        )
+                    }
+                }
+                Text(
+                    text = if (rulesEditable) strings.preLockUnlockedHint else strings.preLockLockedNote,
+                    fontSize = 11.sp,
+                    color = if (rulesEditable) FocusLockColors.TextSecondary else FocusLockColors.FocusEmerald
+                )
+
+                RuleToggleRow(
+                    title = strings.ruleAdultTitle,
+                    desc = strings.ruleAdultDesc,
+                    checked = state.ruleBlockAdultSites,
+                    enabled = rulesEditable,
+                    onCheckedChange = { next -> runWithOptionalPin { onSetRuleAdult(next) } }
+                )
+                HorizontalDivider(color = FocusLockColors.Hairline)
+                RuleToggleRow(
+                    title = strings.ruleGamblingTitle,
+                    desc = strings.ruleGamblingDesc,
+                    checked = state.ruleBlockGamblingSites,
+                    enabled = rulesEditable,
+                    onCheckedChange = { next -> runWithOptionalPin { onSetRuleGambling(next) } }
+                )
+                HorizontalDivider(color = FocusLockColors.Hairline)
+                RuleToggleRow(
+                    title = strings.ruleSocialTitle,
+                    desc = strings.ruleSocialDesc,
+                    checked = state.ruleBlockSocialShorts,
+                    enabled = rulesEditable,
+                    onCheckedChange = { next -> runWithOptionalPin { onSetRuleSocial(next) } }
+                )
+                HorizontalDivider(color = FocusLockColors.Hairline)
+                RuleToggleRow(
+                    title = strings.ruleYouTubeTitle,
+                    desc = strings.ruleYouTubeDesc,
+                    checked = state.excludeYouTubeApp,
+                    enabled = rulesEditable,
+                    onCheckedChange = { next -> runWithOptionalPin { onSetExcludeYouTube(next) } }
+                )
+                HorizontalDivider(color = FocusLockColors.Hairline)
+                RuleToggleRow(
+                    title = strings.ruleReminderTitle,
+                    desc = strings.ruleReminderDesc,
+                    checked = state.motivationalReminderEnabled,
+                    enabled = rulesEditable,
+                    onCheckedChange = { next -> runWithOptionalPin { onSetMotivationalReminder(next) } }
+                )
+            }
+        }
+
         // Duration Selector
         Surface(
             shape = RoundedCornerShape(18.dp),
@@ -613,11 +838,7 @@ fun DashboardScreen(
 
                 StatusRow(
                     label = strings.activeDnsLabel,
-                    value = if (state.vpnSnapshot.activeProfile == DnsProfile.FOCUS_LOCK) {
-                        "family.adguard-dns.com (DoH TLS)"
-                    } else {
-                        "dns.adguard-dns.com (DoH TLS)"
-                    },
+                    value = "${state.vpnSnapshot.activeProfile.dohHost} (DoH TLS)",
                     valueColor = FocusLockColors.TextPrimary
                 )
                 HorizontalDivider(color = FocusLockColors.Hairline)
@@ -689,6 +910,45 @@ private fun DurationChoiceButton(
             fontSize = 13.sp,
             fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Medium,
             color = textColor
+        )
+    }
+}
+
+@Composable
+private fun RuleToggleRow(
+    title: String,
+    desc: String,
+    checked: Boolean,
+    enabled: Boolean,
+    onCheckedChange: (Boolean) -> Unit
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Column(modifier = Modifier.weight(1f).padding(end = 10.dp)) {
+            Text(
+                text = title,
+                fontSize = 13.sp,
+                fontWeight = FontWeight.Medium,
+                color = if (enabled) FocusLockColors.TextPrimary else FocusLockColors.TextSecondary
+            )
+            Text(
+                text = desc,
+                fontSize = 11.sp,
+                color = FocusLockColors.TextMuted
+            )
+        }
+        Switch(
+            checked = checked,
+            enabled = enabled,
+            onCheckedChange = onCheckedChange,
+            colors = SwitchDefaults.colors(
+                checkedThumbColor = FocusLockColors.Canvas,
+                checkedTrackColor = FocusLockColors.FocusEmerald,
+                disabledCheckedTrackColor = FocusLockColors.FocusEmerald.copy(alpha = 0.45f)
+            )
         )
     }
 }
