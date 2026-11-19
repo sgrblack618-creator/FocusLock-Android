@@ -1,5 +1,6 @@
 package com.focuslock.dns.vpn
 
+import android.app.AlarmManager
 import android.app.Notification
 import android.app.NotificationManager
 import android.app.PendingIntent
@@ -8,6 +9,7 @@ import android.content.Intent
 import android.net.VpnService
 import android.os.Build
 import android.os.ParcelFileDescriptor
+import android.os.SystemClock
 import android.provider.Settings
 import androidx.core.app.NotificationCompat
 import com.focuslock.dns.FocusLockApplication
@@ -18,7 +20,9 @@ import com.focuslock.dns.data.MotivationalReminders
 import com.focuslock.dns.model.DnsProfile
 import com.focuslock.dns.model.VpnConnectionState
 import com.focuslock.dns.model.VpnRuntimeSnapshot
+import com.focuslock.dns.receiver.ServiceWatchdogReceiver
 import com.focuslock.dns.ui.BlockReminderActivity
+import com.focuslock.dns.widget.FocusLockWidgetProvider
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -38,8 +42,10 @@ import java.util.concurrent.atomic.AtomicReference
 
 /**
  * Single local VpnService DNS filtering engine supporting both IPv4 & IPv6.
- * - Normal Mode: https://dns.adguard-dns.com/dns-query (AdGuard Default)
- * - Focus Lock Mode: https://family.adguard-dns.com/dns-query (AdGuard Family)
+ * - Normal (Ads ON): https://dns.adguard-dns.com/dns-query (AdGuard Default)
+ * - Normal (Ads OFF): https://security.cloudflare-dns.com/dns-query (Cloudflare Security)
+ * - Focus Lock (Ads ON): https://family.adguard-dns.com/dns-query (AdGuard Family)
+ * - Focus Lock (Ads OFF): https://family.cloudflare-dns.com/dns-query (Cloudflare Family — adult still blocked)
  */
 class FocusLockVpnService : VpnService() {
 
@@ -51,10 +57,11 @@ class FocusLockVpnService : VpnService() {
 
     private val isRunning = AtomicBoolean(false)
     private val activeProfileRef = AtomicReference(DnsProfile.NORMAL)
+    private var currentExcludeYouTube = false
     private var readerThread: Thread? = null
     private var serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
-    private val querySemaphore = Semaphore(24)
+    private val querySemaphore = Semaphore(16)
     private val lastReminderShownAtMs = AtomicLong(0L)
     private val reminderQuoteCursor = AtomicInteger(0)
 
@@ -77,23 +84,30 @@ class FocusLockVpnService : VpnService() {
         }
 
         val desiredProfile = preferences.resolveDesiredProfile()
+        val desiredExcludeYouTube = preferences.excludeYouTubeApp
         activeProfileRef.set(desiredProfile)
 
         startForeground(NOTIFICATION_ID_VPN, buildStatusNotification(desiredProfile))
 
         if (!isRunning.get() || tunDescriptor == null) {
             preferences.shouldMaintainVpn = true
-            startTunnel(desiredProfile)
+            startTunnel(desiredProfile, desiredExcludeYouTube)
+        } else if (desiredExcludeYouTube != currentExcludeYouTube) {
+            // Rebuild TUN descriptor cleanly so per-app YouTube exclusion applies immediately
+            teardownTunnel(VpnConnectionState.CONNECTING, null, removeForeground = false)
+            startTunnel(desiredProfile, desiredExcludeYouTube)
         } else {
             updateRuntimeSnapshot(VpnConnectionState.ACTIVE, desiredProfile, null)
             refreshNotification(desiredProfile)
+            FocusLockWidgetProvider.requestUpdate(applicationContext)
         }
 
         return START_STICKY
     }
 
-    private fun startTunnel(initialProfile: DnsProfile) {
+    private fun startTunnel(initialProfile: DnsProfile, excludeYouTube: Boolean) {
         updateRuntimeSnapshot(VpnConnectionState.CONNECTING, initialProfile, null)
+        currentExcludeYouTube = excludeYouTube
 
         val builder = Builder()
             .setSession("FocusLock DNS Filter")
@@ -106,6 +120,10 @@ class FocusLockVpnService : VpnService() {
             .addRoute(VPN_IPV6_DNS, 128)
 
         runCatching { builder.addDisallowedApplication(packageName) }
+
+        if (excludeYouTube) {
+            runCatching { builder.addDisallowedApplication(YOUTUBE_PACKAGE) }
+        }
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
             builder.setMetered(false)
@@ -135,20 +153,20 @@ class FocusLockVpnService : VpnService() {
         tunOutputStream = FileOutputStream(pfd.fileDescriptor)
         isRunning.set(true)
         updateRuntimeSnapshot(VpnConnectionState.ACTIVE, initialProfile, null)
+        FocusLockWidgetProvider.requestUpdate(applicationContext)
 
-        readerThread = Thread(::runTunReadLoop, "FocusLock-TUN-Reader").apply {
+        readerThread = Thread({ runTunReadLoop(pfd) }, "FocusLock-TUN-Reader").apply {
             priority = Thread.NORM_PRIORITY
             start()
         }
     }
 
-    private fun runTunReadLoop() {
-        val pfd = tunDescriptor ?: return
+    private fun runTunReadLoop(pfd: ParcelFileDescriptor) {
         val inputStream = FileInputStream(pfd.fileDescriptor)
         val buffer = ByteArray(4096)
 
         try {
-            while (isRunning.get() && !Thread.currentThread().isInterrupted) {
+            while (isRunning.get() && tunDescriptor === pfd && !Thread.currentThread().isInterrupted) {
                 val length = inputStream.read(buffer)
                 if (length <= 0) continue
 
@@ -166,7 +184,7 @@ class FocusLockVpnService : VpnService() {
         } catch (_: InterruptedException) {
             // Normal shutdown
         } catch (err: Exception) {
-            if (isRunning.get()) {
+            if (isRunning.get() && tunDescriptor === pfd) {
                 updateRuntimeSnapshot(
                     VpnConnectionState.ERROR,
                     activeProfileRef.get(),
@@ -180,17 +198,26 @@ class FocusLockVpnService : VpnService() {
         if (!isRunning.get()) return
         val client = dohClient ?: return
 
-        val dohAnswer = client.resolveDnsQuery(profile, parsed.dnsPayload)
+        val lockActive = preferences.readTimerState().isFocusLockActive
+        val blockedByCustomRule = lockActive && MotivationalReminders.shouldBlockByLocalRuleInRam(
+            dnsQuery = parsed.dnsPayload,
+            blockGambling = preferences.ruleBlockGamblingSites,
+            blockSocial = preferences.ruleBlockSocialShorts
+        )
 
-        if (dohAnswer != null &&
-            profile == DnsProfile.FOCUS_LOCK &&
-            MotivationalReminders.isBlockedDnsResponse(dohAnswer) &&
-            MotivationalReminders.isAdultCategoryQueryInRam(parsed.dnsPayload)
-        ) {
-            onAdultBlockDetectedInRam()
+        val responseDns = if (blockedByCustomRule) {
+            TunPacketCodec.buildNxDomainDnsResponse(parsed.dnsPayload)
+        } else {
+            val dohAnswer = client.resolveDnsQuery(profile, parsed.dnsPayload)
+            if (dohAnswer != null &&
+                profile.isFocusLockAdultFilter &&
+                MotivationalReminders.isBlockedDnsResponse(dohAnswer) &&
+                MotivationalReminders.isAdultCategoryQueryInRam(parsed.dnsPayload)
+            ) {
+                onAdultBlockDetectedInRam()
+            }
+            dohAnswer ?: TunPacketCodec.buildServFailDnsResponse(parsed.dnsPayload)
         }
-
-        val responseDns = dohAnswer ?: TunPacketCodec.buildServFailDnsResponse(parsed.dnsPayload)
         if (responseDns.isEmpty()) return
 
         val responsePacket = TunPacketCodec.buildResponsePacket(parsed, responseDns)
@@ -210,7 +237,6 @@ class FocusLockVpnService : VpnService() {
         if (now - prev < REMINDER_COOLDOWN_MS) return
         if (!lastReminderShownAtMs.compareAndSet(prev, now)) return
 
-        // Increment pure integer counter only — zero domain names stored
         preferences.incrementUrgesResisted()
 
         if (!preferences.motivationalReminderEnabled) return
@@ -263,12 +289,13 @@ class FocusLockVpnService : VpnService() {
         val desired = preferences.resolveDesiredProfile()
         val current = activeProfileRef.get()
         if (desired != current) {
-            if (desired == DnsProfile.NORMAL) {
+            if (!desired.isFocusLockAdultFilter && !preferences.readTimerState().isFocusLockActive) {
                 preferences.clearExpiredTimer()
             }
             activeProfileRef.set(desired)
             updateRuntimeSnapshot(VpnConnectionState.ACTIVE, desired, null)
             refreshNotification(desired)
+            FocusLockWidgetProvider.requestUpdate(applicationContext)
         }
     }
 
@@ -280,6 +307,27 @@ class FocusLockVpnService : VpnService() {
             postRevokedWarningNotification(applicationContext)
         }
         stopSelf()
+    }
+
+    override fun onTaskRemoved(rootIntent: Intent?) {
+        super.onTaskRemoved(rootIntent)
+        if (preferences.shouldMaintainVpn && prepare(applicationContext) == null) {
+            runCatching {
+                val alarmManager = getSystemService(AlarmManager::class.java)
+                val restartIntent = Intent(applicationContext, ServiceWatchdogReceiver::class.java)
+                val pending = PendingIntent.getBroadcast(
+                    applicationContext,
+                    8812,
+                    restartIntent,
+                    PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+                )
+                alarmManager?.setAndAllowWhileIdle(
+                    AlarmManager.ELAPSED_REALTIME_WAKEUP,
+                    SystemClock.elapsedRealtime() + 1_500L,
+                    pending
+                )
+            }
+        }
     }
 
     override fun onDestroy() {
@@ -296,7 +344,11 @@ class FocusLockVpnService : VpnService() {
         super.onDestroy()
     }
 
-    private fun teardownTunnel(newState: VpnConnectionState, errorMessage: String?) {
+    private fun teardownTunnel(
+        newState: VpnConnectionState,
+        errorMessage: String?,
+        removeForeground: Boolean = true
+    ) {
         isRunning.set(false)
         readerThread?.interrupt()
         readerThread = null
@@ -304,8 +356,11 @@ class FocusLockVpnService : VpnService() {
         tunOutputStream = null
         runCatching { tunDescriptor?.close() }
         tunDescriptor = null
-        stopForeground(STOP_FOREGROUND_REMOVE)
+        if (removeForeground) {
+            stopForeground(STOP_FOREGROUND_REMOVE)
+        }
         updateRuntimeSnapshot(newState, preferences.resolveDesiredProfile(), errorMessage)
+        FocusLockWidgetProvider.requestUpdate(applicationContext)
     }
 
     private fun refreshNotification(profile: DnsProfile) {
@@ -316,16 +371,32 @@ class FocusLockVpnService : VpnService() {
     private fun buildStatusNotification(profile: DnsProfile): Notification {
         val isBn = preferences.appLanguage == FocusLockPreferences.LANG_BN
         val title = when {
-            profile == DnsProfile.FOCUS_LOCK && isBn -> getString(R.string.notif_focus_lock_title)
-            profile == DnsProfile.FOCUS_LOCK -> "FocusLock — Focus Lock Active"
+            profile.isFocusLockAdultFilter && isBn -> getString(R.string.notif_focus_lock_title)
+            profile.isFocusLockAdultFilter -> "FocusLock — Focus Lock Active"
             isBn -> getString(R.string.notif_normal_title)
             else -> "FocusLock — Normal Protection Active"
         }
-        val body = when {
-            profile == DnsProfile.FOCUS_LOCK && isBn -> getString(R.string.notif_focus_lock_body)
-            profile == DnsProfile.FOCUS_LOCK -> "AdGuard Family DNS (Adult sites, ads & trackers blocked)"
-            isBn -> getString(R.string.notif_normal_body)
-            else -> "AdGuard Default DNS (Always-on ad & tracker blocking)"
+        val body = when (profile) {
+            DnsProfile.FOCUS_LOCK -> if (isBn) {
+                getString(R.string.notif_focus_lock_body)
+            } else {
+                "AdGuard Family DNS (Adult sites, ads & trackers blocked)"
+            }
+            DnsProfile.FOCUS_LOCK_NO_ADBLOCK -> if (isBn) {
+                "Cloudflare Family DNS (অ্যাডাল্ট সাইট ব্লক · বিজ্ঞাপন অনুমোদিত)"
+            } else {
+                "Cloudflare Family DNS (Adult sites blocked · Regular ads allowed)"
+            }
+            DnsProfile.NORMAL -> if (isBn) {
+                getString(R.string.notif_normal_body)
+            } else {
+                "AdGuard Default DNS (Always-on ad & tracker blocking)"
+            }
+            DnsProfile.NORMAL_NO_ADBLOCK -> if (isBn) {
+                "Cloudflare Security DNS (ম্যালওয়্যার সুরক্ষা · বিজ্ঞাপন অনুমোদিত)"
+            } else {
+                "Cloudflare Security DNS (Malware protection · Regular ads allowed)"
+            }
         }
 
         val launchIntent = PendingIntent.getActivity(
@@ -351,6 +422,7 @@ class FocusLockVpnService : VpnService() {
         private const val VPN_IPV4_DNS = "10.89.0.2"
         private const val VPN_IPV6_CLIENT = "fd89:0:0:1::1"
         private const val VPN_IPV6_DNS = "fd89:0:0:1::2"
+        private const val YOUTUBE_PACKAGE = "com.google.android.youtube"
 
         private const val NOTIFICATION_ID_VPN = 1001
         private const val NOTIFICATION_ID_ALERT = 1002
