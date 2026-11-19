@@ -58,4 +58,62 @@ class MotivationalReminderTest {
         )
         assertFalse(MotivationalReminders.isAdultCategoryQueryInRam(normalAdQuery))
     }
+
+    @Test
+    fun hourlyQuoteRotatesAcrossHoursAndOffsets() {
+        assertTrue(MotivationalReminders.quotes.size >= 15)
+        val baseMs = 1_700_000_000_000L
+        val idx0 = MotivationalReminders.hourlyQuoteIndex(baseMs, offset = 0)
+        val idx1 = MotivationalReminders.hourlyQuoteIndex(baseMs + 3_600_000L, offset = 0)
+        val idxOffset = MotivationalReminders.hourlyQuoteIndex(baseMs, offset = 1)
+        assertTrue(idx0 in MotivationalReminders.quotes.indices)
+        assertTrue(idx1 != idx0)
+        assertTrue(idxOffset == idx1)
+    }
+
+    @Test
+    fun blocksGamblingAndSocialRulesWhenEnabled() {
+        val gamblingQuery = byteArrayOf(
+            0x12, 0x34, 0x01, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+            0x05, '1'.code.toByte(), 'x'.code.toByte(), 'b'.code.toByte(), 'e'.code.toByte(), 't'.code.toByte(),
+            0x03, 'c'.code.toByte(), 'o'.code.toByte(), 'm'.code.toByte(),
+            0x00, 0x00, 0x01, 0x00, 0x01
+        )
+        assertTrue(
+            MotivationalReminders.shouldBlockByLocalRuleInRam(
+                dnsQuery = gamblingQuery,
+                blockGambling = true,
+                blockSocial = false
+            )
+        )
+        assertFalse(
+            MotivationalReminders.shouldBlockByLocalRuleInRam(
+                dnsQuery = gamblingQuery,
+                blockGambling = false,
+                blockSocial = false
+            )
+        )
+
+        val tiktokQuery = byteArrayOf(
+            0x12, 0x34, 0x01, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+            0x06, 't'.code.toByte(), 'i'.code.toByte(), 'k'.code.toByte(),
+            't'.code.toByte(), 'o'.code.toByte(), 'k'.code.toByte(),
+            0x03, 'c'.code.toByte(), 'o'.code.toByte(), 'm'.code.toByte(),
+            0x00, 0x00, 0x01, 0x00, 0x01
+        )
+        assertTrue(
+            MotivationalReminders.shouldBlockByLocalRuleInRam(
+                dnsQuery = tiktokQuery,
+                blockGambling = false,
+                blockSocial = true
+            )
+        )
+        assertFalse(
+            MotivationalReminders.shouldBlockByLocalRuleInRam(
+                dnsQuery = tiktokQuery,
+                blockGambling = true,
+                blockSocial = false
+            )
+        )
+    }
 }
