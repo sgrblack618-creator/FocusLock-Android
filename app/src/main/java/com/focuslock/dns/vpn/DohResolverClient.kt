@@ -25,9 +25,10 @@ class DohResolverClient(vpnService: VpnService) {
 
     private val dohMediaType = "application/dns-message".toMediaType()
 
-    private val bootstrapDns = Dns { hostname ->
-        DnsProfile.entries.firstOrNull { it.dohHost == hostname }?.resolveBootstrapAddresses()
-            ?: throw UnknownHostException("Blocked non-DoH hostname resolution: $hostname")
+    private val bootstrapDns = object : Dns {
+        override fun lookup(hostname: String): List<InetAddress> =
+            DnsProfile.entries.firstOrNull { it.dohHost == hostname }?.resolveBootstrapAddresses()
+                ?: throw UnknownHostException("Blocked non-DoH hostname resolution: $hostname")
     }
 
     private val protectedSocketFactory = object : SocketFactory() {
