@@ -7,6 +7,7 @@ import android.net.VpnService
 import com.focuslock.dns.data.FocusLockPreferences
 import com.focuslock.dns.timer.LockTimerManager
 import com.focuslock.dns.vpn.FocusLockVpnService
+import com.focuslock.dns.widget.FocusLockWidgetProvider
 
 /**
  * Restores timer schedules and restarts FocusLockVpnService after device reboot
@@ -22,6 +23,7 @@ class BootCompletedReceiver : BroadcastReceiver() {
         val prefs = FocusLockPreferences(context)
         val timerManager = LockTimerManager(context, prefs)
         timerManager.restoreScheduleIfNeeded()
+        FocusLockWidgetProvider.requestUpdate(context)
 
         if (!prefs.shouldMaintainVpn) return
 
